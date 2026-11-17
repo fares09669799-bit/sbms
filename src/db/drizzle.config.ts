@@ -1,7 +1,30 @@
 import { defineConfig } from 'drizzle-kit';
 import * as dotenv from 'dotenv';
 
-dotenv.config();
+const envFiles = [
+  '.env.local',
+  ...(process.env.NODE_ENV === 'production' ? ['.env.production.local', '.env.production'] : []),
+  '.env',
+];
+
+for (const envPath of envFiles) {
+  dotenv.config({ path: envPath, quiet: true });
+}
+
+function normalizeConnectionUrl(rawUrl: string): string {
+  try {
+    const parsed = new URL(rawUrl);
+    const hostname = parsed.hostname.toLowerCase();
+    const isLocal = hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '::1';
+
+    if (!isLocal && process.env.DB_SSL !== 'false' && !parsed.searchParams.has('sslmode')) {
+      parsed.searchParams.set('sslmode', 'require');
+    }
+    return parsed.toString();
+  } catch {
+    return rawUrl;
+  }
+}
 
 function resolveDrizzleUrl(): string | undefined {
   const preferredKeys = [
@@ -17,7 +40,7 @@ function resolveDrizzleUrl(): string | undefined {
   ];
   for (const key of preferredKeys) {
     const val = process.env[key]?.trim();
-    if (val) return val;
+    if (val) return normalizeConnectionUrl(val);
   }
   for (const [key, rawVal] of Object.entries(process.env)) {
     const val = rawVal?.trim();
@@ -26,7 +49,7 @@ function resolveDrizzleUrl(): string | undefined {
       /^postgres(ql)?:\/\//i.test(val) &&
       (key.endsWith('_DATABASE_URL') || key.endsWith('_POSTGRES_URL'))
     ) {
-      return val;
+      return normalizeConnectionUrl(val);
     }
   }
   return undefined;
@@ -34,10 +57,17 @@ function resolveDrizzleUrl(): string | undefined {
 
 const databaseUrl = resolveDrizzleUrl();
 
-const sqlHost = process.env.SQL_HOST || process.env.PGHOST;
-const sqlDbName = process.env.SQL_DB_NAME || process.env.PGDATABASE;
-const user = process.env.SQL_ADMIN_USER || process.env.SQL_USER || process.env.PGUSER;
-const password = process.env.SQL_ADMIN_PASSWORD || process.env.SQL_PASSWORD || process.env.PGPASSWORD;
+const sqlHost = process.env.SQL_HOST?.trim() || process.env.PGHOST?.trim();
+const sqlPort = Number(process.env.SQL_PORT || process.env.PGPORT || 5432);
+const sqlDbName = process.env.SQL_DB_NAME?.trim() || process.env.PGDATABASE?.trim();
+const user =
+  process.env.SQL_ADMIN_USER?.trim() ||
+  process.env.SQL_USER?.trim() ||
+  process.env.PGUSER?.trim();
+const password =
+  process.env.SQL_ADMIN_PASSWORD ||
+  process.env.SQL_PASSWORD ||
+  process.env.PGPASSWORD;
 
 if (!databaseUrl) {
   if (!sqlHost) {
@@ -54,6 +84,11 @@ if (!databaseUrl) {
   }
 }
 
+const isUnixSocket = Boolean(sqlHost && sqlHost.startsWith('/'));
+const isLocalHost =
+  !sqlHost || sqlHost === 'localhost' || sqlHost === '127.0.0.1' || sqlHost === '::1';
+const shouldUseHostSsl = process.env.DB_SSL !== 'false' && !isUnixSocket && !isLocalHost;
+
 export default defineConfig({
   schema: './src/db/schema.ts',
   out: './drizzle',
@@ -63,10 +98,11 @@ export default defineConfig({
     ? { url: databaseUrl }
     : {
         host: sqlHost!,
+        port: Number.isFinite(sqlPort) && sqlPort > 0 ? sqlPort : 5432,
         user: user!,
         password: password!,
         database: sqlDbName!,
-        ssl: false,
+        ssl: shouldUseHostSsl ? { rejectUnauthorized: false } : false,
       },
   verbose: true,
 });

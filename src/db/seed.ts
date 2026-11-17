@@ -1176,11 +1176,23 @@ async function runSeed(): Promise<void> {
 const isDirectSeedRun =
   typeof process !== 'undefined' &&
   Array.isArray(process.argv) &&
-  Boolean(process.argv[1]?.endsWith('seed.ts'));
+  /[/\\]seed\.ts$/i.test(process.argv[1] || '');
 
 if (isDirectSeedRun) {
-  import('dotenv/config')
-    .then(() => ensureSeeded())
+  import('dotenv')
+    .then((dotenv) => {
+      const envFiles = [
+        '.env.local',
+        ...(process.env.NODE_ENV === 'production'
+          ? ['.env.production.local', '.env.production']
+          : []),
+        '.env',
+      ];
+      for (const envPath of envFiles) {
+        dotenv.config({ path: envPath, quiet: true });
+      }
+      return ensureSeeded();
+    })
     .then(async () => {
       console.log('SBMS database seed completed.');
       const { pool } = await import('./index.ts');

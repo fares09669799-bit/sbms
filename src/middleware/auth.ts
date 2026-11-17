@@ -89,9 +89,15 @@ export const requireAuth = async (req: AuthRequest, res: Response, next: NextFun
 
   try {
     // 1. Try SBMS JWT verification first
+    let sbmsDecoded: ReturnType<typeof verifyAccessToken> | null = null;
     try {
-      const decoded = verifyAccessToken(token);
-      const [dbUser] = await db.select().from(users).where(eq(users.id, decoded.sub)).limit(1);
+      sbmsDecoded = verifyAccessToken(token);
+    } catch {
+      sbmsDecoded = null;
+    }
+
+    if (sbmsDecoded) {
+      const [dbUser] = await db.select().from(users).where(eq(users.id, sbmsDecoded.sub)).limit(1);
       if (!dbUser) {
         return res.status(401).json({ error: 'حساب المستخدم غير موجود.' });
       }
@@ -100,8 +106,25 @@ export const requireAuth = async (req: AuthRequest, res: Response, next: NextFun
       }
       req.authUser = mapAuthUser(dbUser);
       return next();
+    }
+
+    // 2. Fallback to Firebase ID Token verification only for RS256 tokens with a kid header
+    let isFirebaseCandidate = false;
+    try {
+      const headerPart = token.split('.')[0];
+      if (headerPart) {
+        const header = JSON.parse(Buffer.from(headerPart, 'base64url').toString('utf8')) as {
+          alg?: string;
+          kid?: string;
+        };
+        isFirebaseCandidate = header.alg === 'RS256' && typeof header.kid === 'string' && header.kid.length > 0;
+      }
     } catch {
-      // Fallback to Firebase ID Token verification
+      isFirebaseCandidate = false;
+    }
+
+    if (!isFirebaseCandidate) {
+      return res.status(401).json({ error: 'انتهت الجلسة أو رمز المصادقة غير صالح.' });
     }
 
     const decodedFirebase = await adminAuth.verifyIdToken(token);
