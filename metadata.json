@@ -1,0 +1,8 @@
+{
+  "name": "SBMS — Smart Bakery Management System",
+  "description": "نظام إدارة المخابز الذكي — منصة محاسبية وتشغيلية متكاملة للمخابز السودانية",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

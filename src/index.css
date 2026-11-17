@@ -1,0 +1,56 @@
+@import "tailwindcss";
+
+@theme {
+  --color-navy: #142D35;
+  --color-navy-hover: #1C3D47;
+  --color-emerald-brand: #176B55;
+  --color-emerald-hover: #125644;
+  --color-gold: #D8AD65;
+  --color-gold-soft: #F7EFE0;
+  --color-canvas: #F5F7F6;
+  --color-surface: #FFFFFF;
+  --color-border-hairline: #E2E7E5;
+  --color-text-muted: #5A6B6E;
+  --font-sans: "IBM Plex Sans Arabic", system-ui, -apple-system, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+@layer base {
+  html {
+    font-family: var(--font-sans);
+    direction: rtl;
+  }
+
+  body {
+    background-color: var(--color-canvas);
+    color: var(--color-navy);
+    font-feature-settings: "tnum" on, "lnum" on;
+  }
+
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@media print {
+  aside,
+  header,
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  main {
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  .print-container {
+    border: none !important;
+    box-shadow: none !important;
+  }
+}
