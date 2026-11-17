@@ -2,6 +2,14 @@ let inMemoryAccessToken: string | null = null;
 let inMemoryRefreshToken: string | null = null;
 
 const REFRESH_STORAGE_KEY = 'sbms_refresh_token';
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || '').trim().replace(/\/+$/, '');
+
+function resolveApiUrl(url: string): string {
+  if (!API_BASE_URL || /^https?:\/\//i.test(url)) {
+    return url;
+  }
+  return `${API_BASE_URL}${url.startsWith('/') ? url : `/${url}`}`;
+}
 
 export function setAuthTokens(accessToken: string | null, refreshToken: string | null, persist: boolean) {
   inMemoryAccessToken = accessToken;
@@ -53,7 +61,7 @@ async function tryRefreshAccessToken(): Promise<string | null> {
     }
 
     try {
-      const res = await fetch('/api/auth/refresh', {
+      const res = await fetch(resolveApiUrl('/api/auth/refresh'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ refreshToken: rt }),
@@ -83,6 +91,7 @@ export async function apiRequest<T>(
   url: string,
   options: RequestInit = {}
 ): Promise<{ ok: boolean; status: number; data?: T; error?: string }> {
+  const targetUrl = resolveApiUrl(url);
   const makeHeaders = (token: string | null): HeadersInit => ({
     'Content-Type': 'application/json',
     ...(options.headers || {}),
@@ -93,19 +102,28 @@ export async function apiRequest<T>(
     await tryRefreshAccessToken();
   }
 
-  let res = await fetch(url, {
-    ...options,
-    headers: makeHeaders(inMemoryAccessToken),
-  });
+  let res: Response;
+  try {
+    res = await fetch(targetUrl, {
+      ...options,
+      headers: makeHeaders(inMemoryAccessToken),
+    });
 
-  if (res.status === 401 && getStoredRefreshToken()) {
-    const refreshed = await tryRefreshAccessToken();
-    if (refreshed) {
-      res = await fetch(url, {
-        ...options,
-        headers: makeHeaders(refreshed),
-      });
+    if (res.status === 401 && getStoredRefreshToken()) {
+      const refreshed = await tryRefreshAccessToken();
+      if (refreshed) {
+        res = await fetch(targetUrl, {
+          ...options,
+          headers: makeHeaders(refreshed),
+        });
+      }
     }
+  } catch {
+    return {
+      ok: false,
+      status: 0,
+      error: 'تعذر الوصول إلى خادم النظام. تحقق من اتصال الشبكة ومن إعداد مسار الواجهة الخلفية (/api).',
+    };
   }
 
   let payload: unknown = null;

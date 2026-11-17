@@ -104,6 +104,10 @@ export const requireAuth = async (req: AuthRequest, res: Response, next: NextFun
       // Fallback to Firebase ID Token verification
     }
 
+    if (!adminAuth) {
+      return res.status(401).json({ error: 'انتهت الجلسة أو رمز المصادقة غير صالح.' });
+    }
+
     const decodedFirebase = await adminAuth.verifyIdToken(token);
     const email = decodedFirebase.email || `${decodedFirebase.uid}@sbms.local`;
     const dbUser = await getOrCreateFirebaseUser(

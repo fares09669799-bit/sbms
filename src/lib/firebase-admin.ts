@@ -1,15 +1,39 @@
 import fs from 'fs';
 import { initializeApp, getApps } from 'firebase-admin/app';
-import { getAuth } from 'firebase-admin/auth';
+import { getAuth, type Auth } from 'firebase-admin/auth';
 
-const firebaseConfig = JSON.parse(
-  fs.readFileSync(new URL('../../firebase-applet-config.json', import.meta.url), 'utf8')
-) as { projectId?: string };
+function resolveFirebaseProjectId(): string | undefined {
+  const envId =
+    process.env.FIREBASE_PROJECT_ID?.trim() || process.env.VITE_FIREBASE_PROJECT_ID?.trim();
+  if (envId) return envId;
 
-if (!getApps().length) {
-  initializeApp({
-    projectId: firebaseConfig.projectId,
-  });
+  try {
+    const raw = fs.readFileSync(
+      new URL('../../firebase-applet-config.json', import.meta.url),
+      'utf8'
+    );
+    const parsed = JSON.parse(raw) as { projectId?: string };
+    return parsed.projectId?.trim() || undefined;
+  } catch {
+    return undefined;
+  }
 }
 
-export const adminAuth = getAuth();
+let resolvedAdminAuth: Auth | null = null;
+
+try {
+  const projectId = resolveFirebaseProjectId();
+  if (!getApps().length) {
+    if (projectId) {
+      initializeApp({ projectId });
+      resolvedAdminAuth = getAuth();
+    }
+  } else {
+    resolvedAdminAuth = getAuth();
+  }
+} catch (err) {
+  console.warn('Firebase Admin initialization skipped:', err);
+  resolvedAdminAuth = null;
+}
+
+export const adminAuth = resolvedAdminAuth;

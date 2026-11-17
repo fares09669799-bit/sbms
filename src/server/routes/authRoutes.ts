@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { and, eq } from 'drizzle-orm';
 import { z } from 'zod';
-import { db } from '../../db/index.ts';
+import { db, isDatabaseConfigured } from '../../db/index.ts';
 import { ensureSeeded } from '../../db/seed.ts';
 import { users, userSessions } from '../../db/schema.ts';
 import { adminAuth } from '../../lib/firebase-admin.ts';
@@ -109,6 +109,11 @@ router.post('/login', authLimiter, async (req, res) => {
     });
   } catch (error) {
     console.error('Login error:', error);
+    if (!isDatabaseConfigured()) {
+      return res.status(503).json({
+        error: 'قاعدة البيانات غير مهيأة في متغيرات البيئة (DATABASE_URL أو SQL_HOST).',
+      });
+    }
     return res.status(500).json({ error: 'تعذر إتمام تسجيل الدخول حالياً.' });
   }
 });
@@ -116,6 +121,9 @@ router.post('/login', authLimiter, async (req, res) => {
 router.post('/firebase-sync', authLimiter, async (req, res) => {
   try {
     await ensureSeeded();
+    if (!adminAuth) {
+      return res.status(503).json({ error: 'مصادقة Firebase غير مفعّلة في هذا الخادم.' });
+    }
     const idToken = String(req.body?.idToken || '').trim();
     if (!idToken) {
       return res.status(400).json({ error: 'رمز Firebase مفقود.' });
