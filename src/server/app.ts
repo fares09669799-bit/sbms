@@ -6,7 +6,7 @@ import inventoryRoutes from './routes/inventoryRoutes.ts';
 import operationsRoutes from './routes/operationsRoutes.ts';
 import accountingRoutes from './routes/accountingRoutes.ts';
 import { createRateLimiter } from './security.ts';
-import { createPool, isDatabaseConfigured } from '../db/index.ts';
+import { createPool, isDatabaseConfigured, resolveDatabaseConnection } from '../db/index.ts';
 
 dotenv.config();
 
@@ -74,7 +74,8 @@ export function createApiApp() {
 
   // Health probe (never throws; always returns 200 JSON)
   app.get('/api/health', async (_req, res) => {
-    const dbConfigured = isDatabaseConfigured();
+    const { source: dbSource } = resolveDatabaseConnection();
+    const dbConfigured = dbSource !== null;
     let dbReachable = false;
     let tablesReady = false;
 
@@ -103,6 +104,7 @@ export function createApiApp() {
       ok: true,
       service: 'sbms-api',
       dbConfigured,
+      dbSource,
       dbReachable,
       tablesReady,
       timestamp: new Date().toISOString(),

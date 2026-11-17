@@ -3,15 +3,41 @@ import * as dotenv from 'dotenv';
 
 dotenv.config();
 
-const databaseUrl =
-  process.env.DATABASE_URL?.trim() ||
-  process.env.POSTGRES_URL?.trim() ||
-  process.env.POSTGRES_PRISMA_URL?.trim();
+function resolveDrizzleUrl(): string | undefined {
+  const preferredKeys = [
+    'DATABASE_URL_UNPOOLED',
+    'POSTGRES_URL_NON_POOLING',
+    'DATABASE_URL',
+    'POSTGRES_URL',
+    'POSTGRES_PRISMA_URL',
+    'PRISMA_DATABASE_URL',
+    'NEON_DATABASE_URL',
+    'SUPABASE_DB_URL',
+    'SUPABASE_POSTGRES_URL',
+  ];
+  for (const key of preferredKeys) {
+    const val = process.env[key]?.trim();
+    if (val) return val;
+  }
+  for (const [key, rawVal] of Object.entries(process.env)) {
+    const val = rawVal?.trim();
+    if (
+      val &&
+      /^postgres(ql)?:\/\//i.test(val) &&
+      (key.endsWith('_DATABASE_URL') || key.endsWith('_POSTGRES_URL'))
+    ) {
+      return val;
+    }
+  }
+  return undefined;
+}
 
-const sqlHost = process.env.SQL_HOST;
-const sqlDbName = process.env.SQL_DB_NAME;
-const user = process.env.SQL_ADMIN_USER;
-const password = process.env.SQL_ADMIN_PASSWORD;
+const databaseUrl = resolveDrizzleUrl();
+
+const sqlHost = process.env.SQL_HOST || process.env.PGHOST;
+const sqlDbName = process.env.SQL_DB_NAME || process.env.PGDATABASE;
+const user = process.env.SQL_ADMIN_USER || process.env.SQL_USER || process.env.PGUSER;
+const password = process.env.SQL_ADMIN_PASSWORD || process.env.SQL_PASSWORD || process.env.PGPASSWORD;
 
 if (!databaseUrl) {
   if (!sqlHost) {

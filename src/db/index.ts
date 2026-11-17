@@ -7,20 +7,57 @@ declare global {
   var _drizzleDb: NodePgDatabase<typeof schema> | undefined;
 }
 
+const PREFERRED_URL_KEYS = [
+  'DATABASE_URL',
+  'POSTGRES_URL',
+  'POSTGRES_PRISMA_URL',
+  'PRISMA_DATABASE_URL',
+  'POSTGRES_URL_NON_POOLING',
+  'DATABASE_URL_UNPOOLED',
+  'NEON_DATABASE_URL',
+  'SUPABASE_DB_URL',
+  'SUPABASE_POSTGRES_URL',
+] as const;
+
+export function resolveDatabaseConnection(): {
+  source: string | null;
+  connectionString?: string;
+} {
+  for (const key of PREFERRED_URL_KEYS) {
+    const val = process.env[key]?.trim();
+    if (val) {
+      return { source: key, connectionString: val };
+    }
+  }
+
+  // Fallback for Vercel Storage integrations configured with a custom prefix (e.g. SBMS_DATABASE_URL)
+  for (const [key, rawVal] of Object.entries(process.env)) {
+    const val = rawVal?.trim();
+    if (
+      val &&
+      (/^postgres(ql)?:\/\//i.test(val)) &&
+      (key.endsWith('_DATABASE_URL') || key.endsWith('_POSTGRES_URL'))
+    ) {
+      return { source: key, connectionString: val };
+    }
+  }
+
+  if (process.env.SQL_HOST?.trim()) {
+    return { source: 'SQL_HOST' };
+  }
+  if (process.env.PGHOST?.trim()) {
+    return { source: 'PGHOST' };
+  }
+
+  return { source: null };
+}
+
 export function isDatabaseConfigured(): boolean {
-  return Boolean(
-    process.env.DATABASE_URL?.trim() ||
-      process.env.POSTGRES_URL?.trim() ||
-      process.env.POSTGRES_PRISMA_URL?.trim() ||
-      process.env.SQL_HOST?.trim()
-  );
+  return resolveDatabaseConnection().source !== null;
 }
 
 function buildPoolConfig(): PoolConfig {
-  const connectionString =
-    process.env.DATABASE_URL?.trim() ||
-    process.env.POSTGRES_URL?.trim() ||
-    process.env.POSTGRES_PRISMA_URL?.trim();
+  const { connectionString } = resolveDatabaseConnection();
 
   const isVercel = Boolean(process.env.VERCEL);
   const maxConnections = isVercel ? 1 : 10;
@@ -43,17 +80,17 @@ function buildPoolConfig(): PoolConfig {
     };
   }
 
-  const host = process.env.SQL_HOST?.trim();
+  const host = process.env.SQL_HOST?.trim() || process.env.PGHOST?.trim();
   const isUnixSocket = Boolean(host && host.startsWith('/'));
   const isLocalHost = !host || host === 'localhost' || host === '127.0.0.1';
   const shouldUseSsl = process.env.DB_SSL !== 'false' && !isUnixSocket && !isLocalHost;
 
   return {
     host,
-    port: process.env.SQL_PORT ? Number(process.env.SQL_PORT) : 5432,
-    user: process.env.SQL_USER,
-    password: process.env.SQL_PASSWORD,
-    database: process.env.SQL_DB_NAME,
+    port: Number(process.env.SQL_PORT || process.env.PGPORT || 5432),
+    user: process.env.SQL_USER || process.env.PGUSER,
+    password: process.env.SQL_PASSWORD || process.env.PGPASSWORD,
+    database: process.env.SQL_DB_NAME || process.env.PGDATABASE,
     max: maxConnections,
     idleTimeoutMillis,
     connectionTimeoutMillis: 10000,
