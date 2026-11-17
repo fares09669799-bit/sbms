@@ -1,6 +1,5 @@
 import fs from 'fs';
-import { initializeApp, getApps } from 'firebase-admin/app';
-import { getAuth, type Auth } from 'firebase-admin/auth';
+import type { Auth } from 'firebase-admin/auth';
 
 function resolveFirebaseProjectId(): string | undefined {
   const envId =
@@ -19,21 +18,39 @@ function resolveFirebaseProjectId(): string | undefined {
   }
 }
 
-let resolvedAdminAuth: Auth | null = null;
+let adminAuthPromise: Promise<Auth | null> | null = null;
 
-try {
-  const projectId = resolveFirebaseProjectId();
-  if (!getApps().length) {
-    if (projectId) {
-      initializeApp({ projectId });
-      resolvedAdminAuth = getAuth();
-    }
-  } else {
-    resolvedAdminAuth = getAuth();
+async function getLazyAdminAuth(): Promise<Auth | null> {
+  if (!adminAuthPromise) {
+    adminAuthPromise = (async () => {
+      try {
+        const projectId = resolveFirebaseProjectId();
+        if (!projectId) {
+          return null;
+        }
+        const [{ initializeApp, getApps }, { getAuth }] = await Promise.all([
+          import('firebase-admin/app'),
+          import('firebase-admin/auth'),
+        ]);
+        if (!getApps().length) {
+          initializeApp({ projectId });
+        }
+        return getAuth();
+      } catch (err) {
+        console.warn('Firebase Admin lazy initialization failed:', err);
+        return null;
+      }
+    })();
   }
-} catch (err) {
-  console.warn('Firebase Admin initialization skipped:', err);
-  resolvedAdminAuth = null;
+  return adminAuthPromise;
 }
 
-export const adminAuth = resolvedAdminAuth;
+export const adminAuth = {
+  async verifyIdToken(idToken: string, checkRevoked?: boolean) {
+    const auth = await getLazyAdminAuth();
+    if (!auth) {
+      throw new Error('FIREBASE_ADMIN_UNAVAILABLE');
+    }
+    return auth.verifyIdToken(idToken, checkRevoked);
+  },
+};

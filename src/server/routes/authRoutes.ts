@@ -121,9 +121,6 @@ router.post('/login', authLimiter, async (req, res) => {
 router.post('/firebase-sync', authLimiter, async (req, res) => {
   try {
     await ensureSeeded();
-    if (!adminAuth) {
-      return res.status(503).json({ error: 'مصادقة Firebase غير مفعّلة في هذا الخادم.' });
-    }
     const idToken = String(req.body?.idToken || '').trim();
     if (!idToken) {
       return res.status(400).json({ error: 'رمز Firebase مفقود.' });
