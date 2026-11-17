@@ -114,6 +114,16 @@ router.post('/login', authLimiter, async (req, res) => {
         error: 'قاعدة البيانات غير مهيأة في متغيرات البيئة (DATABASE_URL أو SQL_HOST).',
       });
     }
+    const errObj = error as { code?: string; cause?: { code?: string }; message?: string } | null;
+    const pgCode = errObj?.code || errObj?.cause?.code;
+    if (
+      pgCode === '42P01' ||
+      (typeof errObj?.message === 'string' && /relation\s+.*\s+does not exist/i.test(errObj.message))
+    ) {
+      return res.status(503).json({
+        error: 'الجداول غير مُنشأة في قاعدة البيانات، شغّل الأمر npm run db:push ثم أعد المحاولة.',
+      });
+    }
     return res.status(500).json({ error: 'تعذر إتمام تسجيل الدخول حالياً.' });
   }
 });

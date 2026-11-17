@@ -1,9 +1,10 @@
-import { drizzle } from 'drizzle-orm/node-postgres';
+import { drizzle, type NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { Pool, type PoolConfig } from 'pg';
 import * as schema from './schema.ts';
 
 declare global {
   var _postgresPool: Pool | undefined;
+  var _drizzleDb: NodePgDatabase<typeof schema> | undefined;
 }
 
 export function isDatabaseConfigured(): boolean {
@@ -21,7 +22,9 @@ function buildPoolConfig(): PoolConfig {
     process.env.POSTGRES_URL?.trim() ||
     process.env.POSTGRES_PRISMA_URL?.trim();
 
-  const maxConnections = process.env.VERCEL ? 5 : 10;
+  const isVercel = Boolean(process.env.VERCEL);
+  const maxConnections = isVercel ? 1 : 10;
+  const idleTimeoutMillis = isVercel ? 5000 : 30000;
 
   if (connectionString) {
     const isLocalUrl =
@@ -33,8 +36,9 @@ function buildPoolConfig(): PoolConfig {
     return {
       connectionString,
       max: maxConnections,
-      idleTimeoutMillis: 30000,
-      connectionTimeoutMillis: 15000,
+      idleTimeoutMillis,
+      connectionTimeoutMillis: 10000,
+      ...(isVercel ? { allowExitOnIdle: true } : {}),
       ...(shouldUseSsl ? { ssl: { rejectUnauthorized: false } } : {}),
     };
   }
@@ -51,14 +55,18 @@ function buildPoolConfig(): PoolConfig {
     password: process.env.SQL_PASSWORD,
     database: process.env.SQL_DB_NAME,
     max: maxConnections,
-    idleTimeoutMillis: 30000,
-    connectionTimeoutMillis: 15000,
+    idleTimeoutMillis,
+    connectionTimeoutMillis: 10000,
+    ...(isVercel ? { allowExitOnIdle: true } : {}),
     ...(shouldUseSsl ? { ssl: { rejectUnauthorized: false } } : {}),
   };
 }
 
-export const createPool = () => {
+export const createPool = (): Pool => {
   if (!global._postgresPool) {
+    if (!isDatabaseConfigured()) {
+      throw new Error('DATABASE_NOT_CONFIGURED');
+    }
     global._postgresPool = new Pool(buildPoolConfig());
 
     global._postgresPool.on('error', (err) => {
@@ -68,7 +76,25 @@ export const createPool = () => {
   return global._postgresPool;
 };
 
-const pool = createPool();
+function getLazyDb(): NodePgDatabase<typeof schema> {
+  if (!global._drizzleDb) {
+    global._drizzleDb = drizzle(createPool(), { schema });
+  }
+  return global._drizzleDb;
+}
 
-export const db = drizzle(pool, { schema });
-export { pool };
+export const pool: Pool = new Proxy({} as Pool, {
+  get(_target, prop, receiver) {
+    const realPool = createPool();
+    const value = Reflect.get(realPool, prop, receiver);
+    return typeof value === 'function' ? value.bind(realPool) : value;
+  },
+});
+
+export const db: NodePgDatabase<typeof schema> = new Proxy({} as NodePgDatabase<typeof schema>, {
+  get(_target, prop, receiver) {
+    const realDb = getLazyDb();
+    const value = Reflect.get(realDb, prop, receiver);
+    return typeof value === 'function' ? value.bind(realDb) : value;
+  },
+});

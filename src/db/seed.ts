@@ -1172,3 +1172,22 @@ async function runSeed(): Promise<void> {
     ]);
   });
 }
+
+const isDirectSeedRun =
+  typeof process !== 'undefined' &&
+  Array.isArray(process.argv) &&
+  Boolean(process.argv[1]?.endsWith('seed.ts'));
+
+if (isDirectSeedRun) {
+  import('dotenv/config')
+    .then(() => ensureSeeded())
+    .then(async () => {
+      console.log('SBMS database seed completed.');
+      const { pool } = await import('./index.ts');
+      await pool.end().catch(() => {});
+    })
+    .catch((err) => {
+      console.error('SBMS database seed failed:', err);
+      process.exit(1);
+    });
+}

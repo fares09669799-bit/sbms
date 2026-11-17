@@ -6,7 +6,7 @@ import inventoryRoutes from './routes/inventoryRoutes.ts';
 import operationsRoutes from './routes/operationsRoutes.ts';
 import accountingRoutes from './routes/accountingRoutes.ts';
 import { createRateLimiter } from './security.ts';
-import { isDatabaseConfigured } from '../db/index.ts';
+import { createPool, isDatabaseConfigured } from '../db/index.ts';
 
 dotenv.config();
 
@@ -72,12 +72,39 @@ export function createApiApp() {
   });
   app.use('/api', apiRateLimiter);
 
-  // Health probe
-  app.get('/api/health', (_req, res) => {
-    res.json({
+  // Health probe (never throws; always returns 200 JSON)
+  app.get('/api/health', async (_req, res) => {
+    const dbConfigured = isDatabaseConfigured();
+    let dbReachable = false;
+    let tablesReady = false;
+
+    if (dbConfigured) {
+      let timeoutId: ReturnType<typeof setTimeout> | undefined;
+      try {
+        const timeoutPromise = new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(() => reject(new Error('DB_HEALTH_TIMEOUT')), 3000);
+        });
+        const queryPromise = createPool().query<{ ok: number; tables_ready: boolean }>(
+          "SELECT 1 AS ok, to_regclass('public.users') IS NOT NULL AS tables_ready"
+        );
+        queryPromise.catch(() => null);
+        const result = await Promise.race([queryPromise, timeoutPromise]);
+        dbReachable = result.rows[0]?.ok === 1;
+        tablesReady = Boolean(result.rows[0]?.tables_ready);
+      } catch {
+        dbReachable = false;
+        tablesReady = false;
+      } finally {
+        if (timeoutId) clearTimeout(timeoutId);
+      }
+    }
+
+    return res.status(200).json({
       ok: true,
       service: 'sbms-api',
-      dbConfigured: isDatabaseConfigured(),
+      dbConfigured,
+      dbReachable,
+      tablesReady,
       timestamp: new Date().toISOString(),
     });
   });
