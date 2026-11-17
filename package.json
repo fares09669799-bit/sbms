@@ -6,6 +6,9 @@
   "engines": {
     "node": "22.x"
   },
+  "overrides": {
+    "jwks-rsa": "^3.2.2"
+  },
   "scripts": {
     "dev": "tsx server.ts",
     "start": "node server.ts",
