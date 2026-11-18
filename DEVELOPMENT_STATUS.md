@@ -1,8 +1,8 @@
 # SBMS — Smart Bakery Management System
 # حالة التطوير الحالية (DEVELOPMENT_STATUS.md)
 
-**آخر تحديث:** المرحلة 6 — المراجعة النهائية للجودة والأمان والأداء وتجهيز الإنتاج (Phase 6 Completed)
-**الحالة العامة:** نظام ERP تشغيلي ومحاسبي متكامل بواجهة React + خادم Express (`Node.js 22 Native ESM`) + قاعدة بيانات PostgreSQL (Cloud SQL + Drizzle ORM، 31 جدولاً علائقياً) اجتاز تدقيق الأمان، التزامن، السلامة المحاسبية، والاختبار الشامل المكون من 16 خطوة مع توثيق تشغيلي كامل، وخالٍ تماماً من أي ميزات ذكاء اصطناعي.
+**آخر تحديث:** المرحلة 7 — التقوية الأمنية، الدقة المحاسبية بـ `decimal.js`، اختبارات `Vitest`، إعادة الهيكلة المعيارية، وتحديث التوثيق (Production Hardening & Modularization Completed)
+**الحالة العامة:** نظام ERP تشغيلي ومحاسبي متكامل بواجهة React 19 + خادم Express (`Node.js 22 Native ESM` و`Vercel Serverless`) + قاعدة بيانات PostgreSQL (Drizzle ORM، 31 جدولاً علائقياً) مع حسابات مالية بدقة `decimal.js`، واختبارات وحدة عبر `Vitest`، وبنية مسارات وصفحات مقسمة معيارياً، وخالٍ تماماً من أي ميزات ذكاء اصطناعي.
 
 ## ما تم إنجازه في المرحلة الأولى (Phase 1 — Preserved)
 - نظام التصميم العربي `RTL` بالألوان المؤسسية (`#142D35`, `#176B55`, `#D8AD65`) وخط `IBM Plex Sans Arabic` + `IBM Plex Mono`.
@@ -61,3 +61,18 @@
    - تقسيم حزمة الواجهة (`React.lazy` + `Suspense` + Vite `manualChunks`) لتقليص الحزمة الأولية إلى `88.49 kB` (`24.33 kB` gzip)، وإصلاح عرض الفلاتر والقوائم المنبثقة على شاشات `360px`.
 4. **الاختبار النهائي والتوثيق:**
    - اجتياز 24 اختباراً عملياً حياً شمل الأمان، التزامن، الصلاحيات، وسير العمل الكامل (16 خطوة) وتنظيف قاعدة البيانات إلى وضعها المرجعي النظيف، وإكمال جميع ملفات التوثيق العشرة.
+
+## ما تم إنجازه في حزمة التقوية وإعادة الهيكلة (Production Hardening, Financial Precision & Modularization)
+1. **تنظيف الاعتماديات وضبط البناء:**
+   - إضافة `react-is@^19` كاعتماد مباشر متوافق مع React 19، وإزالة الحزم غير المستخدمة (`@google/genai`, `motion`)، ونقل أدوات التطوير (`drizzle-kit`, `@types/jsonwebtoken`, `@types/pg`) إلى `devDependencies` مع الحفاظ على `bun.lock` وحيداً.
+2. **الأمان والاستقرار على Vercel Serverless:**
+   - تشديد التحقق من `JWT_SECRET` و`JWT_REFRESH_SECRET` في الإنتاج (`NODE_ENV=production` أو `VERCEL=1`) برفض التشغيل عند غيابهما أو عدم اختلافهما أو قصرهما عن 32 حرفاً، وتفعيل التحقق الصارم من شهادات PostgreSQL SSL افتراضياً (`rejectUnauthorized: true`) مع دعم `DB_SSL_CA` و`DB_SSL_REJECT_UNAUTHORIZED`.
+3. **الدقة المالية واختبارات الوحدة (`decimal.js` + `Vitest`):**
+   - استخراج دوال الحساب المحاسبي والتقريب الصرفي في وحدة نقية (`src/server/accounting/formulas.ts`) وتغطيتها بـ 12 اختبار وحدة عبر `Vitest` (`src/server/accounting/formulas.test.ts`، عبر `npm test`).
+   - ترقية العمليات الحسابية المالية في الخادم (`formulas.ts`, `financialSnapshotService.ts`) والواجهة (`accountingCalculations.ts`) إلى `decimal.js` بنمط التقريب المحاسبي `ROUND_HALF_UP` دون تغيير صيغ الاستجابات أو المعادلات المعتمدة.
+4. **إعادة الهيكلة المعيارية للملفات الكبيرة (Modularization):**
+   - **مسارات العمليات:** تقسيم `src/server/routes/operationsRoutes.ts` إلى `src/server/services/operationsService.ts` و5 وحدات مسارات متخصصة تحت `src/server/routes/operations/` مع إبقاء الموزّع الرئيسي وحماية `requireAuth`.
+   - **مسارات المحاسبة:** تقسيم `src/server/routes/accountingRoutes.ts` إلى `src/server/services/financialSnapshotService.ts` و4 وحدات مسارات متخصصة تحت `src/server/routes/accounting/` تحت حماية `requireAuth` و`requireRole('OWNER')`.
+   - **صفحات المحاسبة في الواجهة:** تقسيم `src/pages/owner/AccountingPages.tsx` إلى `accountingConstants.ts` و3 صفحات مستقلة (`CashExpensesPage.tsx`, `CustomersPage.tsx`, `EmployeesPage.tsx`) مع إبقاء `AccountingPages.tsx` كملف تصدير مرجعي (`barrel`).
+5. **تحديث الوثائق (مع إبقاء التعديلات الهيكلية المتقدمة قيد الخطة):**
+   - تحديث `DEPLOYMENT_GUIDE.md` و`README.md` و`DEVELOPMENT_STATUS.md` و`ROADMAP.md` لتغطية متغيرات Vercel (`DATABASE_URL`, `JWT_SECRET`, `JWT_REFRESH_SECRET`, `FIREBASE_PROJECT_ID`)، مع ترك محدّد الطلبات الموزّع ونقل مرفقات المصروفات للتخزين الخارجي كخطط مقترحة بانتظار الموافقة قبل تنفيذ أي ترحيل على قاعدة البيانات أو خدمة مدفوعة.

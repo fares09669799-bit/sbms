@@ -12,18 +12,85 @@ export const REFRESH_TOKEN_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const runtimeFallbackAccessSecret = crypto.randomBytes(64).toString('hex');
 const runtimeFallbackRefreshSecret = crypto.randomBytes(64).toString('hex');
 
+const MIN_PRODUCTION_SECRET_LENGTH = 32;
+const EXAMPLE_PLACEHOLDER_SECRETS = new Set([
+  'replace-with-strong-secret-in-production',
+  'replace-with-strong-refresh-secret-in-production',
+]);
+
+export function isProductionRuntime(): boolean {
+  return process.env.NODE_ENV === 'production' || Boolean(process.env.VERCEL);
+}
+
+export function validateProductionJwtSecrets(): void {
+  if (!isProductionRuntime()) return;
+
+  const access = process.env.JWT_SECRET?.trim() || '';
+  const refresh = process.env.JWT_REFRESH_SECRET?.trim() || '';
+
+  if (!access) {
+    throw new Error(
+      'SECURITY_CONFIG_ERROR: JWT_SECRET is required in production (minimum 32 characters).'
+    );
+  }
+  if (access.length < MIN_PRODUCTION_SECRET_LENGTH) {
+    throw new Error(
+      `SECURITY_CONFIG_ERROR: JWT_SECRET must be at least ${MIN_PRODUCTION_SECRET_LENGTH} characters in production.`
+    );
+  }
+  if (EXAMPLE_PLACEHOLDER_SECRETS.has(access)) {
+    throw new Error(
+      'SECURITY_CONFIG_ERROR: JWT_SECRET cannot use the example placeholder value in production.'
+    );
+  }
+
+  if (!refresh) {
+    throw new Error(
+      'SECURITY_CONFIG_ERROR: JWT_REFRESH_SECRET is required in production (minimum 32 characters).'
+    );
+  }
+  if (refresh.length < MIN_PRODUCTION_SECRET_LENGTH) {
+    throw new Error(
+      `SECURITY_CONFIG_ERROR: JWT_REFRESH_SECRET must be at least ${MIN_PRODUCTION_SECRET_LENGTH} characters in production.`
+    );
+  }
+  if (EXAMPLE_PLACEHOLDER_SECRETS.has(refresh)) {
+    throw new Error(
+      'SECURITY_CONFIG_ERROR: JWT_REFRESH_SECRET cannot use the example placeholder value in production.'
+    );
+  }
+
+  if (access === refresh) {
+    throw new Error(
+      'SECURITY_CONFIG_ERROR: JWT_SECRET and JWT_REFRESH_SECRET must be different in production.'
+    );
+  }
+}
+
+if (isProductionRuntime()) {
+  validateProductionJwtSecrets();
+}
+
 function getAccessSecret(): string {
+  if (isProductionRuntime()) {
+    validateProductionJwtSecrets();
+    return process.env.JWT_SECRET!.trim();
+  }
   const secret = process.env.JWT_SECRET?.trim();
   return secret && secret.length >= 16 ? secret : runtimeFallbackAccessSecret;
 }
 
 function getRefreshSecret(): string {
+  if (isProductionRuntime()) {
+    validateProductionJwtSecrets();
+    return process.env.JWT_REFRESH_SECRET!.trim();
+  }
   const access = getAccessSecret();
   const refresh = process.env.JWT_REFRESH_SECRET?.trim();
   if (refresh && refresh.length >= 16 && refresh !== access) {
     return refresh;
   }
-  // Guarantee separate signing secret even if misconfigured
+  // Guarantee separate signing secret even if misconfigured in development
   return refresh && refresh === access
     ? crypto.createHmac('sha256', runtimeFallbackRefreshSecret).update(refresh).digest('hex')
     : runtimeFallbackRefreshSecret;
@@ -32,10 +99,13 @@ function getRefreshSecret(): string {
 export function getJwtEnvStatus() {
   const accessEnv = process.env.JWT_SECRET?.trim() || '';
   const refreshEnv = process.env.JWT_REFRESH_SECRET?.trim() || '';
+  const minLength = isProductionRuntime() ? MIN_PRODUCTION_SECRET_LENGTH : 16;
   return {
-    jwtSecretLoaded: accessEnv.length >= 16,
-    jwtRefreshSecretLoaded: refreshEnv.length >= 16,
-    secretsAreDistinct: accessEnv.length >= 16 && refreshEnv.length >= 16 && accessEnv !== refreshEnv,
+    jwtSecretLoaded: accessEnv.length >= minLength && !EXAMPLE_PLACEHOLDER_SECRETS.has(accessEnv),
+    jwtRefreshSecretLoaded:
+      refreshEnv.length >= minLength && !EXAMPLE_PLACEHOLDER_SECRETS.has(refreshEnv),
+    secretsAreDistinct:
+      accessEnv.length >= minLength && refreshEnv.length >= minLength && accessEnv !== refreshEnv,
     accessTtl: ACCESS_TOKEN_TTL,
     refreshTtl: REFRESH_TOKEN_TTL,
   };

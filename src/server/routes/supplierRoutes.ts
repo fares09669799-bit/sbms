@@ -16,6 +16,7 @@ import {
 } from '../../db/schema.ts';
 import { type AuthRequest, requireAuth, requireRole } from '../../middleware/auth.ts';
 import { generateReference, recordAuditLog } from '../audit.ts';
+import { calculateWeightedAverageCost } from '../accounting/formulas.ts';
 
 const router = Router();
 
@@ -119,11 +120,13 @@ async function postInvoiceItemsAndFinancials(
 
     const prevQty = Number(item.availableQuantity);
     const prevCost = Number(item.averageCost);
-    const nextQty = Number((prevQty + lineQty).toFixed(3));
-    const nextAvgCost =
-      nextQty > 0
-        ? Number(((prevQty * prevCost + lineTotal) / nextQty).toFixed(2))
-        : lineUnitPrice;
+    const { nextQuantity: nextQty, nextAverageCost: nextAvgCost } = calculateWeightedAverageCost({
+      previousQty: prevQty,
+      previousAverageCost: prevCost,
+      addedQty: lineQty,
+      lineTotal,
+      fallbackUnitPrice: lineUnitPrice,
+    });
 
     const effectiveBatchCode =
       line.batchCode?.trim() || `BCH-${invoice.invoiceNumber}-${item.id}`;

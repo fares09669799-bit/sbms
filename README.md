@@ -6,11 +6,12 @@
 
 ## المعمارية التقنية
 
-- **الواجهة الأمامية (Frontend):** React 19 + TypeScript + Vite 8 + Tailwind CSS v4 (RTL)، مع تقسيم الكود عبر `React.lazy` و`Suspense` وفصل الحزم الثقيلة (`xlsx`, `jspdf`, `recharts`, `firebase`).
-- **الخادم الخلفي (Backend):** Express 4 يعمل عبر `server.ts` على المنفذ `3000` متوافقاً مع **Node.js 22 Native ESM** (`npm start` -> `node server.ts`).
-- **قاعدة البيانات (Database):** PostgreSQL (Cloud SQL Developer Edition — `europe-west1`) باستخدام **Drizzle ORM** و31 جدولاً علائقياً بأنواع `NUMERIC(14,2)` للمبالغ و`NUMERIC(14,3)` للكميات المخزنية.
-- **المصادقة والأمان:** تشفير كلمات المرور عبر `scrypt` (`salt` عشوائي 16 بايت)، رموز وصول وتحديث منفصلة (`JWT_SECRET` و`JWT_REFRESH_SECRET`) مع تدوير رمز التحديث وكشف إعادة الاستخدام، التحقق الصارم من الأدوار (`OWNER` vs `AGENT`) وصلاحيات الوكيل (`PRODUCTION_LOG`, `SALES_LOG`, `EXPENSES_LOG`, `SHIFT_MANAGE`)، والتحقق من المدخلات عبر `Zod`.
-- **الاستقلالية التشغيلية:** التطبيق خالٍ تماماً من أي استدعاءات أو واجهات ذكاء اصطناعي، وتعتمد جميع حساباته على المعاملات الذرية (`db.transaction`) وأقفال التزامن (`pg_advisory_xact_lock`).
+- **الواجهة الأمامية (Frontend):** React 19 + TypeScript + Vite 8 + Tailwind CSS v4 (RTL)، مع تقسيم الكود عبر `React.lazy` و`Suspense` وفصل الحزم الثقيلة (`xlsx`, `jspdf`, `recharts`, `firebase`) وتنظيم صفحات المحاسبة والعمليات في وحدات مستقلة.
+- **الخادم الخلفي (Backend):** Express 4 يعمل محلياً عبر `server.ts` على المنفذ `3000` (متوافقاً مع **Node.js 22 Native ESM**) وعلى بيئة **Vercel Serverless** عبر `api/index.ts`، مع تقسيم المسارات والخدمات إلى وحدات متخصصة (`src/server/routes/operations/*`, `src/server/routes/accounting/*`, `src/server/services/*`).
+- **قاعدة البيانات (Database):** PostgreSQL (متوافق مع Cloud SQL أو Neon أو Supabase Pooler على المنفذ `6543`) باستخدام **Drizzle ORM** و31 جدولاً علائقياً بأنواع `NUMERIC(14,2)` للمبالغ و`NUMERIC(14,3)` للكميات المخزنية، مع إنفاذ SSL الآمن افتراضياً في الإنتاج واتصال Pool كسول (`lazy`).
+- **الدقة المحاسبية والاختبارات:** تنفيذ الحسابات المالية والتقريب (`ROUND_HALF_UP`) عبر مكتبة `decimal.js` داخل وحدة نقية (`src/server/accounting/formulas.ts`) مغطاة باختبارات وحدة آلية عبر `Vitest` (`npm test`).
+- **المصادقة والأمان:** تشفير كلمات المرور عبر `scrypt` (`salt` عشوائي 16 بايت)، رموز وصول وتحديث منفصلة (`JWT_SECRET` و`JWT_REFRESH_SECRET` بإلزام طول 32+ حرفاً في الإنتاج)، تدوير رمز التحديث وكشف إعادة الاستخدام، التحقق الصارم من الأدوار (`OWNER` vs `AGENT`) وصلاحيات الوكيل، والتحقق من المدخلات عبر `Zod`.
+- **الاستقلالية التشغيلية ومدير الحزم:** التطبيق خالٍ تماماً من أي استدعاءات أو واجهات ذكاء اصطناعي، وتعتمد عملياته على المعاملات الذرية (`db.transaction`) وأقفال التزامن (`pg_advisory_xact_lock`)، مع إدارة الاعتماديات عبر `bun` (`bun.lock`).
 
 ---
 
@@ -33,8 +34,8 @@
 
 | الوثيقة | الوصف |
 |---|---|
-| `INSTALLATION_GUIDE.md` | دليل التثبيت المحلي ومتطلبات البيئة |
-| `DEPLOYMENT_GUIDE.md` | دليل البناء والنشر للإنتاج (Cloud Run / Node 22) |
+| `INSTALLATION_GUIDE.md` | دليل التثبيت المحلي ومتطلبات البيئة وأوامر الفحص (`test`, `lint`, `build`, `db:push`, `db:seed`) |
+| `DEPLOYMENT_GUIDE.md` | دليل البناء والنشر للإنتاج (Cloud Run / Vercel + Neon & Supabase / Node 22) |
 | `DATABASE_SCHEMA.md` | مخطط قاعدة البيانات (31 جدولاً والفهارس والمعادلات) |
 | `API_DOCUMENTATION.md` | توثيق نقاط نهاية REST API والصلاحيات |
 | `SECURITY.md` | الضوابط الأمنية والتحقق والتشفير ومنع التلاعب |

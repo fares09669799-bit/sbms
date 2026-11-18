@@ -109,19 +109,29 @@ router.post('/login', authLimiter, async (req, res) => {
     });
   } catch (error) {
     console.error('Login error:', error);
-    if (!isDatabaseConfigured()) {
-      return res.status(503).json({
-        error: 'قاعدة البيانات غير مهيأة في متغيرات البيئة (DATABASE_URL أو SQL_HOST).',
-      });
-    }
     const errObj = error as { code?: string; cause?: { code?: string }; message?: string } | null;
     const pgCode = errObj?.code || errObj?.cause?.code;
-    if (
-      pgCode === '42P01' ||
-      (typeof errObj?.message === 'string' && /relation\s+.*\s+does not exist/i.test(errObj.message))
-    ) {
+    const errMsg = typeof errObj?.message === 'string' ? errObj.message : '';
+
+    if (!isDatabaseConfigured() || errMsg === 'DATABASE_NOT_CONFIGURED') {
+      return res.status(503).json({
+        error: 'قاعدة البيانات غير مهيأة في متغيرات البيئة (DATABASE_URL أو POSTGRES_HOST أو SQL_HOST).',
+      });
+    }
+    if (pgCode === '42P01' || /relation\s+.*\s+does not exist/i.test(errMsg)) {
       return res.status(503).json({
         error: 'الجداول غير مُنشأة في قاعدة البيانات، شغّل الأمر npm run db:push ثم أعد المحاولة.',
+      });
+    }
+    if (
+      pgCode === 'ECONNREFUSED' ||
+      pgCode === 'ENOTFOUND' ||
+      pgCode === 'ETIMEDOUT' ||
+      pgCode === 'ECONNRESET' ||
+      pgCode === '28P01'
+    ) {
+      return res.status(503).json({
+        error: 'تعذر الاتصال بقاعدة البيانات حالياً. يرجى التحقق من إعدادات الاتصال.',
       });
     }
     return res.status(500).json({ error: 'تعذر إتمام تسجيل الدخول حالياً.' });

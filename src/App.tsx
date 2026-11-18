@@ -1,51 +1,53 @@
-import React, { Suspense, lazy, useEffect, useState } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import { SbmsProvider, useSbms } from './context/SbmsContext';
 import { LoginPage } from './pages/LoginPage';
 import { Sidebar } from './components/layout/Sidebar';
 import { TopBar } from './components/layout/TopBar';
 import { AgentNavKey, OwnerNavKey } from './types/sbms';
 import { Button } from './components/ui/Button';
+import { RouteErrorBoundary } from './components/ui/RouteErrorBoundary';
+import { lazyWithRetry } from './lib/lazyWithRetry';
 
-const OwnerDashboard = lazy(() =>
+const OwnerDashboard = lazyWithRetry(() =>
   import('./pages/owner/OwnerDashboard').then((m) => ({ default: m.OwnerDashboard }))
 );
-const SuppliersPage = lazy(() =>
+const SuppliersPage = lazyWithRetry(() =>
   import('./pages/owner/SuppliersPage').then((m) => ({ default: m.SuppliersPage }))
 );
-const SupplierProfilePage = lazy(() =>
+const SupplierProfilePage = lazyWithRetry(() =>
   import('./pages/owner/SupplierProfilePage').then((m) => ({ default: m.SupplierProfilePage }))
 );
-const InventoryPage = lazy(() =>
+const InventoryPage = lazyWithRetry(() =>
   import('./pages/owner/InventoryPage').then((m) => ({ default: m.InventoryPage }))
 );
-const ProductionPage = lazy(() =>
+const ProductionPage = lazyWithRetry(() =>
   import('./pages/owner/ProductionPage').then((m) => ({ default: m.ProductionPage }))
 );
-const SalesPage = lazy(() =>
+const SalesPage = lazyWithRetry(() =>
   import('./pages/owner/SalesPage').then((m) => ({ default: m.SalesPage }))
 );
-const ReportsPage = lazy(() =>
+const ReportsPage = lazyWithRetry(() =>
   import('./pages/owner/ReportsPage').then((m) => ({ default: m.ReportsPage }))
 );
-const AgentsShiftsPage = lazy(() =>
+const AgentsShiftsPage = lazyWithRetry(() =>
   import('./pages/owner/OperationsSubPages').then((m) => ({ default: m.AgentsShiftsPage }))
 );
-const AuditNotificationsPage = lazy(() =>
+const AuditNotificationsPage = lazyWithRetry(() =>
   import('./pages/owner/OperationsSubPages').then((m) => ({ default: m.AuditNotificationsPage }))
 );
-const CashExpensesPage = lazy(() =>
+const CashExpensesPage = lazyWithRetry(() =>
   import('./pages/owner/OperationsSubPages').then((m) => ({ default: m.CashExpensesPage }))
 );
-const CustomersPage = lazy(() =>
+const CustomersPage = lazyWithRetry(() =>
   import('./pages/owner/OperationsSubPages').then((m) => ({ default: m.CustomersPage }))
 );
-const EmployeesPage = lazy(() =>
+const EmployeesPage = lazyWithRetry(() =>
   import('./pages/owner/OperationsSubPages').then((m) => ({ default: m.EmployeesPage }))
 );
-const SettingsPage = lazy(() =>
+const SettingsPage = lazyWithRetry(() =>
   import('./pages/owner/OperationsSubPages').then((m) => ({ default: m.SettingsPage }))
 );
-const AgentWorkspace = lazy(() =>
+const AgentWorkspace = lazyWithRetry(() =>
   import('./pages/agent/AgentWorkspace').then((m) => ({ default: m.AgentWorkspace }))
 );
 
@@ -154,38 +156,40 @@ const AppShell: React.FC = () => {
         )}
 
         <main className="flex-1 p-4 lg:p-8 max-w-[1440px] w-full mx-auto">
-          <Suspense
-            fallback={
-              <div className="bg-white border border-[#E2E7E5] rounded-xl p-8 text-center text-xs text-[#5A6B6E]">
-                جاري تحميل الصفحة...
-              </div>
-            }
-          >
-            {isOwner ? (
-              <>
-                {ownerNav === 'dashboard' && <OwnerDashboard onNavigate={setOwnerNav} />}
-                {ownerNav === 'suppliers' && <SuppliersPage onOpenProfile={openSupplierProfile} />}
-                {ownerNav === 'supplier-profile' && (
-                  <SupplierProfilePage
-                    supplierId={selectedSupplierId}
-                    onBack={() => setOwnerNav('suppliers')}
-                  />
-                )}
-                {ownerNav === 'inventory' && <InventoryPage />}
-                {ownerNav === 'production' && <ProductionPage />}
-                {ownerNav === 'sales' && <SalesPage />}
-                {ownerNav === 'agents-shifts' && <AgentsShiftsPage />}
-                {ownerNav === 'cash-expenses' && <CashExpensesPage />}
-                {ownerNav === 'customers' && <CustomersPage />}
-                {ownerNav === 'employees' && <EmployeesPage />}
-                {ownerNav === 'reports' && <ReportsPage />}
-                {ownerNav === 'audit-notifications' && <AuditNotificationsPage />}
-                {ownerNav === 'settings' && <SettingsPage />}
-              </>
-            ) : (
-              <AgentWorkspace activeTab={agentNav} onNavigate={setAgentNav} />
-            )}
-          </Suspense>
+          <RouteErrorBoundary resetKey={isOwner ? `owner:${ownerNav}` : `agent:${agentNav}`}>
+            <Suspense
+              fallback={
+                <div className="bg-white border border-[#E2E7E5] rounded-xl p-8 text-center text-xs text-[#5A6B6E]">
+                  جاري تحميل الصفحة...
+                </div>
+              }
+            >
+              {isOwner ? (
+                <>
+                  {ownerNav === 'dashboard' && <OwnerDashboard onNavigate={setOwnerNav} />}
+                  {ownerNav === 'suppliers' && <SuppliersPage onOpenProfile={openSupplierProfile} />}
+                  {ownerNav === 'supplier-profile' && (
+                    <SupplierProfilePage
+                      supplierId={selectedSupplierId}
+                      onBack={() => setOwnerNav('suppliers')}
+                    />
+                  )}
+                  {ownerNav === 'inventory' && <InventoryPage />}
+                  {ownerNav === 'production' && <ProductionPage />}
+                  {ownerNav === 'sales' && <SalesPage />}
+                  {ownerNav === 'agents-shifts' && <AgentsShiftsPage />}
+                  {ownerNav === 'cash-expenses' && <CashExpensesPage />}
+                  {ownerNav === 'customers' && <CustomersPage />}
+                  {ownerNav === 'employees' && <EmployeesPage />}
+                  {ownerNav === 'reports' && <ReportsPage />}
+                  {ownerNav === 'audit-notifications' && <AuditNotificationsPage />}
+                  {ownerNav === 'settings' && <SettingsPage />}
+                </>
+              ) : (
+                <AgentWorkspace activeTab={agentNav} onNavigate={setAgentNav} />
+              )}
+            </Suspense>
+          </RouteErrorBoundary>
         </main>
       </div>
     </div>

@@ -1,6 +1,6 @@
 # SBMS — Production Deployment Guide (`DEPLOYMENT_GUIDE.md`)
 
-يوضح هذا الدليل متطلبات وإجراءات نشر نظام **SBMS** في بيئة الإنتاج (Cloud Run + Cloud SQL PostgreSQL).
+يوضح هذا الدليل متطلبات وإجراءات نشر نظام **SBMS** في بيئة الإنتاج سواءً عبر **Cloud Run + Cloud SQL PostgreSQL** أو عبر **Vercel Serverless + Neon / Supabase PostgreSQL**.
 
 ---
 
@@ -9,8 +9,9 @@
   - البناء: `npm run build`
   - التشغيل: `npm start` (`NODE_ENV=production node server.ts`)
 - **المنفذ:** يستمع الخادم على `0.0.0.0:3000` (`const PORT = 3000` في `server.ts`).
-- **قاعدة البيانات:** مثيل Cloud SQL PostgreSQL (إقليم `europe-west1`) متصل عبر Unix Socket (`/app/cloudsql/...` أو متغيرات `SQL_HOST`, `SQL_DB_NAME`, `SQL_USER`, `SQL_PASSWORD`).
-- **الاعتماديات وقت التشغيل:** تبقى حزم `drizzle-orm`, `pg`, `express`, `dotenv`, `jsonwebtoken`, `zod`, `firebase-admin` ضمن `dependencies` لأن `server.ts` يخدم مسارات API والملفات الثابتة من `dist/` مباشرة.
+- **قاعدة البيانات:** PostgreSQL عبر مثيل Cloud SQL (أو مزوّد سحابي مثل Neon / Supabase عبر `DATABASE_URL` بنمط Pooler).
+- **الاعتماديات وقت التشغيل:** تبقى حزم `drizzle-orm`, `pg`, `express`, `dotenv`, `jsonwebtoken`, `zod`, `decimal.js`, `firebase-admin`, `react-is` ضمن `dependencies`، بينما تبقى أدوات الترحيل والاختبار والأنواع (`drizzle-kit`, `vitest`, `@types/*`) في `devDependencies`.
+- **مدير الحزم:** يُدار المشروع عبر `bun` (`bun.lock`) أو تشغيل سكربتات الفحص عبر `npm run`.
 
 ---
 
@@ -19,8 +20,9 @@
    - التأكد من تعريف `JWT_SECRET` و`JWT_REFRESH_SECRET` بقيم عشوائية قوية ومستقلة في مدير الأسرار / بيئة Cloud Run.
    - ضبط `APP_URL` على النطاق النهائي المعتمد للتطبيق لضمان سماح سياسة CORS به.
    - التأكد من عدم وجود أي قيم افتراضية لكلمات المرور؛ يجب تغيير كلمة مرور المالك الافتراضية فوراً بعد أول تسجيل دخول من خلال صفحة الإعدادات أو نقطة النهاية `POST /api/auth/change-password`.
-2. **التحقق من البناء وتوافق Node 22 ESM:**
+2. **التحقق من الاختبارات والبناء وتوافق Node 22 ESM:**
    ```bash
+   npm test
    npm run lint
    npm run build
    NODE_ENV=production node --input-type=module -e "await import('./src/server/security.ts'); await import('./src/server/routes/authRoutes.ts'); await import('./src/server/routes/supplierRoutes.ts'); await import('./src/server/routes/inventoryRoutes.ts'); await import('./src/server/routes/accountingRoutes.ts'); await import('./src/server/routes/operationsRoutes.ts');"
@@ -76,17 +78,20 @@
 
 ### الخطوة 2: إضافة `DATABASE_URL` ومتغيرات البيئة في Vercel
 
+> **ملاحظة مهمة حول `DATABASE_URL` على Vercel:** يجب أن يكون `DATABASE_URL` رابط **Pooler** (مثل رابط Neon `-pooler` أو رابط Supabase Transaction Pooler على المنفذ `6543` مع `?pgbouncer=true`) لتجنب استنزاف اتصالات قاعدة البيانات في دوال Serverless. كما أن التحقق من شهادة SSL (`rejectUnauthorized: true`) هو الوضع الافتراضي في الإنتاج، ويمكن ضبط شهادة مخصصة عبر `DB_SSL_CA` أو تعديل السلوك عبر `DB_SSL_REJECT_UNAUTHORIZED=false` عند الحاجة الاستثنائية فقط.
+
 1. افتح مشروعك في **Vercel** ← انتقل إلى **Settings → Environment Variables**.
 2. أضف المتغيرات التالية (اختر بيئة **Production**، ويمكنك تحديد **Preview** أيضاً إذا أردت اختبار النسخ التجريبية):
-   - **`DATABASE_URL`**: الصق رابط اتصال Neon Pooled أو Supabase Transaction Pooler (`6543`).
+   - **`DATABASE_URL`**: الصق رابط اتصال **Pooler** (Neon `-pooler` أو Supabase Transaction Pooler على المنفذ `6543`).
    - **`DATABASE_URL_UNPOOLED`** *(مستحسن)*: الصق رابط الاتصال المباشر أو Session Pooler (`5432`) لتستخدمه أداة `drizzle-kit` تلقائياً عند الترحيل.
-   - **`JWT_SECRET`**: سلسلة عشوائية قوية (16 حرفاً فأكثر؛ يفضّل 32+ حرفاً).
-   - **`JWT_REFRESH_SECRET`**: سلسلة عشوائية قوية ومختلفة تماماً عن `JWT_SECRET`.
+   - **`JWT_SECRET`**: سلسلة عشوائية قوية (32 حرفاً فأكثر؛ يرفض الخادم الإقلاع في الإنتاج إذا كانت مفقودة أو أقل من 32 حرفاً أو مطابقة للقيمة النموذجية).
+   - **`JWT_REFRESH_SECRET`**: سلسلة عشوائية قوية ومختلفة تماماً عن `JWT_SECRET` (32 حرفاً فأكثر).
+   - **`FIREBASE_PROJECT_ID`** *(اختياري عند تفعيل تسجيل الدخول عبر Firebase Auth)*: معرّف مشروع Firebase ليستخدمه المحوّل السحابي في التحقق من رموز هوية Firebase عند الطلب (يُحمّل كسولاً في `src/lib/firebase-admin.ts`، ولا يُنصح بوضع بيانات اعتماد خدمة خاصة غير لازمة إذا كان تسجيل الدخول يعتمد على JWT فقط).
    - **`APP_URL`** *(اختياري عند استخدام نطاق مخصص)*: رابط موقعك الإنتاجي مثل `https://your-bakery.vercel.app`.
 3. بعد حفظ المتغيرات، انتقل إلى تبويب **Deployments** واضغط **Redeploy** على أحدث نشر (لأن متغيرات البيئة لا تسري على الدوال المبنية مسبقاً إلا بعد إعادة النشر).
 
 > **تنبيه أمني وتشغيلي:**
-> - في حال عدم ضبط `JWT_SECRET` و`JWT_REFRESH_SECRET` على Vercel، يولّد الخادم مفاتيح مؤقتة عشوائية عند كل تشغيل، مما يتسبب في تسجيل خروج المستخدمين بشكل متكرر.
+> - في بيئة الإنتاج (`NODE_ENV=production` أو `VERCEL=1`) يرفض الخادم تشغيل المصادقة بمفاتيح افتراضية أو ضعيفة، لذا يجب تعريف `JWT_SECRET` و`JWT_REFRESH_SECRET` بطول لا يقل عن 32 حرفاً وبقيم مستقلة.
 > - **لا تضع أبداً** أي رابط اتصال فعلي أو كلمة مرور أو مفتاح سري داخل الكود أو المستودع أو ملف `.env.example`.
 
 ---

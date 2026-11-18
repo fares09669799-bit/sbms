@@ -128,7 +128,7 @@ export function createApiApp() {
     console.error('Unhandled API error:', err);
     if (!isDatabaseConfigured()) {
       return res.status(503).json({
-        error: 'قاعدة البيانات غير مهيأة في متغيرات البيئة (DATABASE_URL أو SQL_HOST).',
+        error: 'قاعدة البيانات غير مهيأة في متغيرات البيئة (DATABASE_URL أو POSTGRES_HOST أو SQL_HOST).',
       });
     }
     return res.status(500).json({ error: 'حدث خطأ داخلي في الخادم.' });

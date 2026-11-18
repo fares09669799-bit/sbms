@@ -1,7 +1,7 @@
 import type { NextFunction, Request, Response } from 'express';
 import { eq } from 'drizzle-orm';
 import { adminAuth } from '../lib/firebase-admin.ts';
-import { db } from '../db/index.ts';
+import { db, isDatabaseConfigured } from '../db/index.ts';
 import { users } from '../db/schema.ts';
 import { verifyAccessToken } from '../server/security.ts';
 
@@ -143,6 +143,31 @@ export const requireAuth = async (req: AuthRequest, res: Response, next: NextFun
     return next();
   } catch (error) {
     console.error('Authentication failure:', error);
+    const errObj = error as { code?: string; cause?: { code?: string }; message?: string } | null;
+    const errCode = errObj?.code || errObj?.cause?.code;
+    const errMsg = typeof errObj?.message === 'string' ? errObj.message : '';
+
+    if (!isDatabaseConfigured() || errMsg === 'DATABASE_NOT_CONFIGURED') {
+      return res.status(503).json({
+        error: 'قاعدة البيانات غير مهيأة في متغيرات البيئة (DATABASE_URL أو POSTGRES_HOST أو SQL_HOST).',
+      });
+    }
+    if (errCode === '42P01' || /relation\s+.*\s+does not exist/i.test(errMsg)) {
+      return res.status(503).json({
+        error: 'الجداول غير مُنشأة في قاعدة البيانات، شغّل الأمر npm run db:push ثم أعد المحاولة.',
+      });
+    }
+    if (
+      errCode === 'ECONNREFUSED' ||
+      errCode === 'ENOTFOUND' ||
+      errCode === 'ETIMEDOUT' ||
+      errCode === 'ECONNRESET' ||
+      errCode === '28P01'
+    ) {
+      return res.status(503).json({
+        error: 'تعذر الاتصال بقاعدة البيانات حالياً. يرجى التحقق من إعدادات الاتصال.',
+      });
+    }
     return res.status(401).json({ error: 'انتهت الجلسة أو رمز المصادقة غير صالح.' });
   }
 };

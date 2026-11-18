@@ -71,6 +71,7 @@ async function runSeed(): Promise<void> {
         { code: 'SETTINGS_MANAGE', name: 'إعدادات النظام والوكلاء', module: 'settings', roleCode: 'OWNER' },
         { code: 'PRODUCTION_LOG', name: 'تسجيل الإنتاج والاستهلاك', module: 'production', roleCode: 'AGENT' },
         { code: 'SALES_LOG', name: 'تسجيل مبيعات الوردية', module: 'sales', roleCode: 'AGENT' },
+        { code: 'EXPENSES_LOG', name: 'تسجيل المصروفات اليومية', module: 'expenses', roleCode: 'AGENT' },
         { code: 'SHIFT_MANAGE', name: 'فتح وإغلاق الوردية', module: 'shifts', roleCode: 'AGENT' },
       ])
       .onConflictDoNothing();
